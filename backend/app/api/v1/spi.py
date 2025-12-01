@@ -9,20 +9,28 @@ from ...services.spi import (
     compute_spi_forecast_for_point,
     generate_recommendations,
     categorize_spi,
+    forecast_spi,                    # SARIMA прогноз
+    categorize_spi_forecast,         # Категория SARIMA прогноза
+    generate_forecast_recommendations,  # Рекомендации SARIMA прогноза
 )
 from ...services.meteostat_client import MeteostatError
 from ...services.open_meteo_client import ForecastError
 
 router = APIRouter()
 
-
-# -----------------------------
-# Модели ответа
-# -----------------------------
+# ================================================================
+# МОДЕЛИ
+# ================================================================
 
 class SpiHistoryPoint(BaseModel):
     date: dt.date = Field(..., description="Дата, соответствующая окну сумм осадков")
     spi: float = Field(..., description="Значение SPI на эту дату")
+
+
+class SpiSarimaForecast(BaseModel):
+    spi_30: float = Field(..., description="Прогноз SPI на 30 дней вперёд")
+    category: str = Field(..., description="Категория прогноза SPI-30")
+    recommendations: List[str] = Field(..., description="Рекомендации на основе прогноза")
 
 
 class SpiPointResponse(BaseModel):
@@ -34,16 +42,14 @@ class SpiPointResponse(BaseModel):
     category: str
     history: List[SpiHistoryPoint]
     recommendations: List[str]
+    forecast: SpiSarimaForecast     # SARIMA блок
 
 
 class SpiForecastPoint(BaseModel):
     date: dt.date = Field(..., description="Дата конца окна для прогноза SPI")
     spi: float = Field(..., description="Прогнозируемое значение SPI")
     category: str = Field(..., description="Категория по прогнозному SPI")
-    recommendations: List[str] = Field(
-        ...,
-        description="Рекомендации с учётом прогнозируемых условий",
-    )
+    recommendations: List[str] = Field(..., description="Рекомендации с учётом прогнозируемых условий")
 
 
 class SpiForecastResponse(BaseModel):
@@ -58,9 +64,9 @@ class SpiForecastResponse(BaseModel):
     forecast: List[SpiForecastPoint]
 
 
-# -----------------------------
-# Эндпоинт: текущее SPI по координатам
-# -----------------------------
+# ================================================================
+# ЭНДПОИНТ: ТЕКУЩЕЕ SPI + SARIMA ПРОГНОЗ
+# ================================================================
 
 @router.get("/by-coords", response_model=SpiPointResponse)
 async def get_spi_by_coords(
@@ -85,12 +91,27 @@ async def get_spi_by_coords(
     except Exception:
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
+    # История SPI
     history = [
         SpiHistoryPoint(date=idx.date(), spi=float(val))
         for idx, val in spi_series.items()
     ]
 
+    # Рекомендации по текущему SPI
     recs = generate_recommendations(spi_value)
+
+    # -------------------------
+    # SARIMA-прогноз SPI-30
+    # -------------------------
+    spi_30 = forecast_spi(spi_series)
+    forecast_category = categorize_spi_forecast(spi_30)
+    forecast_recs = generate_forecast_recommendations(spi_30)
+
+    sarima_block = SpiSarimaForecast(
+        spi_30=spi_30,
+        category=forecast_category,
+        recommendations=forecast_recs,
+    )
 
     return SpiPointResponse(
         lat=lat,
@@ -101,12 +122,13 @@ async def get_spi_by_coords(
         category=category,
         history=history,
         recommendations=recs,
+        forecast=sarima_block,
     )
 
 
-# -----------------------------
-# Эндпоинт: прогноз SPI по координатам
-# -----------------------------
+# ================================================================
+# ЭНДПОИНТ: ПРОГНОЗ SPI ПО ОСАДКАМ (OPEN-METEO)
+# ================================================================
 
 @router.get("/forecast-by-coords", response_model=SpiForecastResponse)
 async def get_spi_forecast_by_coords(
@@ -135,7 +157,7 @@ async def get_spi_forecast_by_coords(
     except Exception:
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
-    # Формируем список прогнозных точек
+    # Формируем точки прогноза
     forecast_points: List[SpiForecastPoint] = []
     for idx, val in spi_forecast.items():
         spi_val = float(val)

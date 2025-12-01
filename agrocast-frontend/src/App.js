@@ -12,6 +12,9 @@ import {
   Legend,
 } from "recharts";
 import "./App.css";
+import MapPicker from "./components/MapPicker";
+import Info from "./components/Info";
+
 
 const API_BASE_URL = "http://127.0.0.1:8000/api/v1";
 
@@ -29,9 +32,11 @@ function App() {
   const [forecastLoading, setForecastLoading] = useState(false);
   const [forecastError, setForecastError] = useState("");
   const [forecast, setForecast] = useState(null);
+  const [page, setPage] = useState("main");
+
 
   // -------------------------------
-  // Запрос текущего SPI
+  // Запрос текущего SPI (+ SARIMA прогноз внутри ответа)
   // -------------------------------
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -65,7 +70,7 @@ function App() {
   };
 
   // -------------------------------
-  // Запрос прогноза SPI
+  // Запрос краткосрочного прогноза SPI (Open-Meteo)
   // -------------------------------
   const handleForecast = async () => {
     setForecastLoading(true);
@@ -101,12 +106,14 @@ function App() {
     }
   };
 
+  // История SPI (для графика и таблицы)
   const historyData =
     result?.history?.map((item) => ({
       date: item.date,
       spi: item.spi,
     })) || [];
 
+  // Краткосрочный прогноз (Open-Meteo) для графика
   const forecastData =
     forecast?.forecast?.map((item) => ({
       date: item.date,
@@ -115,13 +122,51 @@ function App() {
     })) || [];
 
   return (
-    <div className="App">
-      <header className="app-header">
-        <h1>AgroCast SPI</h1>
-        <p>Оценка климатического риска по координатам</p>
-      </header>
+  <div className="App">
+    <header className="app-header">
+      <h1>AgroCast SPI</h1>
+      <p>Оценка климатического риска по координатам</p>
+    </header>
 
+      <nav className="top-menu">
+    <button
+      className={page === "main" ? "menu-btn active" : "menu-btn"}
+      onClick={() => setPage("main")}
+    >
+      Главная
+    </button>
+
+    <button
+      className={page === "info" ? "menu-btn active" : "menu-btn"}
+      onClick={() => setPage("info")}
+    >
+      Информация
+    </button>
+  </nav>
+
+    {/* Переключение страниц */}
+    {page === "info" ? (
+      <Info />
+    ) : (
       <main className="app-main">
+        {/* Карта для выбора точки */}
+        <section className="card">
+          <h2>Выбор точки на карте</h2>
+          <MapPicker
+            lat={lat}
+            lon={lon}
+            onSelect={(newLat, newLon) => {
+              setLat(newLat);
+              setLon(newLon);
+            }}
+          />
+          <p style={{ marginTop: "10px" }}>
+            Выбранные координаты:{" "}
+            <strong>{lat.toFixed(4)}</strong>,{" "}
+            <strong>{lon.toFixed(4)}</strong>
+          </p>
+        </section>
+
         {/* Форма параметров */}
         <section className="card">
           <h2>Параметры расчёта</h2>
@@ -169,7 +214,7 @@ function App() {
             </div>
 
             <div className="form-group">
-              <label>Прогноз (дней)</label>
+              <label>Прогноз (дней, Open-Meteo)</label>
               <input
                 type="number"
                 min={1}
@@ -188,7 +233,9 @@ function App() {
                 onClick={handleForecast}
                 disabled={forecastLoading}
               >
-                {forecastLoading ? "Загрузка прогноза..." : "Получить прогноз SPI"}
+                {forecastLoading
+                  ? "Загрузка прогноза..."
+                  : "Получить прогноз SPI"}
               </button>
             </div>
           </form>
@@ -228,6 +275,35 @@ function App() {
                   <h3>Рекомендации</h3>
                   <ul>
                     {result.recommendations.map((text, idx) => (
+                      <li key={idx}>{text}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+          </section>
+        )}
+
+        {/* Долгосрочный прогноз (SARIMA) */}
+        {result?.forecast && (
+          <section className="card">
+            <h2>Долгосрочный прогноз SPI (SARIMA)</h2>
+            <div className="info-grid">
+              <div>
+                <strong>SPI через 30 дней:</strong>{" "}
+                {result.forecast.spi_30.toFixed(2)}
+              </div>
+              <div>
+                <strong>Категория:</strong>{" "}
+                {result.forecast.category}
+              </div>
+            </div>
+
+            {Array.isArray(result.forecast.recommendations) &&
+              result.forecast.recommendations.length > 0 && (
+                <div className="advice-box">
+                  <h3>Рекомендации по долгосрочному прогнозу</h3>
+                  <ul>
+                    {result.forecast.recommendations.map((text, idx) => (
                       <li key={idx}>{text}</li>
                     ))}
                   </ul>
@@ -284,11 +360,14 @@ function App() {
           )}
         </section>
 
-        {/* Прогноз SPI */}
+        {/* Краткосрочный прогноз (Open-Meteo) */}
         <section className="card">
-          <h2>Прогноз SPI</h2>
+          <h2>Краткосрочный прогноз SPI (по погоде)</h2>
           {!forecast ? (
-            <p>Нажмите «Получить прогноз SPI», чтобы увидеть ожидаемую динамику.</p>
+            <p>
+              Нажмите «Получить прогноз SPI», чтобы увидеть ожидаемую динамику
+              на ближайшие дни.
+            </p>
           ) : forecast.forecast.length === 0 ? (
             <p>Прогнозных данных нет для заданных параметров.</p>
           ) : (
@@ -296,7 +375,8 @@ function App() {
               <div className="info-grid">
                 <div>
                   <strong>Текущий SPI:</strong>{" "}
-                  {forecast.latest_spi.toFixed(2)} ({forecast.latest_category})
+                  {forecast.latest_spi.toFixed(2)}{" "}
+                  ({forecast.latest_category})
                 </div>
                 <div>
                   <strong>Горизонт прогноза:</strong>{" "}
@@ -344,15 +424,16 @@ function App() {
                 </table>
               </div>
 
-              {/* Можно отдельно показать рекомендации по ближайшему дню прогноза */}
               {forecast.forecast[0]?.recommendations &&
                 forecast.forecast[0].recommendations.length > 0 && (
                   <div className="advice-box">
                     <h3>Рекомендации на ближайший день</h3>
                     <ul>
-                      {forecast.forecast[0].recommendations.map((text, idx) => (
-                        <li key={idx}>{text}</li>
-                      ))}
+                      {forecast.forecast[0].recommendations.map(
+                        (text, idx) => (
+                          <li key={idx}>{text}</li>
+                        )
+                      )}
                     </ul>
                   </div>
                 )}
@@ -360,8 +441,10 @@ function App() {
           )}
         </section>
       </main>
-    </div>
-  );
+    )}
+  </div>
+);
+
 }
 
 export default App;

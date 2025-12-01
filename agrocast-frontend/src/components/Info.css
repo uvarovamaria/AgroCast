@@ -1,0 +1,45 @@
+.info-page {
+  padding: 20px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.info-page section {
+  background: #fff;
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+.info-page h1 {
+  margin-bottom: 20px;
+}
+
+.info-page h2 {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+.info-toggle {
+  margin-top: 8px;
+  margin-bottom: 10px;
+  background: none;
+  border: none;
+  color: #2563eb;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.95rem;
+}
+
+.info-toggle:hover {
+  text-decoration: underline;
+}
+
+.info-details {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}

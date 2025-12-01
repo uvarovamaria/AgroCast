@@ -7,10 +7,61 @@ from scipy.stats import norm, gamma
 from .meteostat_client import fetch_daily_precipitation, MeteostatError
 from .open_meteo_client import fetch_daily_precipitation_forecast, ForecastError
 
+# -----------------------------
+# Прогноз SPI на основе SARIMA
+# -----------------------------
+
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+
+def forecast_spi(spi_series: pd.Series, days: int = 30) -> float:
+    """
+    Прогноз SPI на N дней вперёд с помощью SARIMA.
+    """
+    # SARIMA требует регулярный временной ряд
+    spi_series = spi_series.asfreq("D").interpolate()
+
+    try:
+        model = SARIMAX(
+            spi_series,
+            order=(1, 0, 1),
+            seasonal_order=(1, 0, 1, 30),
+            enforce_stationarity=False,
+            enforce_invertibility=False,
+        )
+        model_fit = model.fit(disp=False)
+        forecast = model_fit.forecast(days)
+        return float(forecast.iloc[-1])
+    except Exception:
+        # fallback если SARIMA не сошлась
+        return float(spi_series.tail(30).mean())
+
+
+def categorize_spi_forecast(spi: float) -> str:
+    """Категория для прогноза SPI."""
+    if spi <= -2:
+        return "экстремальная засуха ожидается"
+    if spi <= -1.5:
+        return "сильная засуха ожидается"
+    if spi <= -1:
+        return "умеренная засуха ожидается"
+    if spi < 1:
+        return "нормальное состояние ожидается"
+    if spi < 1.5:
+        return "повышенная влажность ожидается"
+    if spi < 2:
+        return "сильная влажность ожидается"
+    return "экстремальная влажность ожидается"
+
+
+def generate_forecast_recommendations(spi_forecast: float) -> list[str]:
+    """Рекомендации на основе прогноза SPI."""
+    return generate_recommendations(spi_forecast)
 
 # -----------------------------
 # Генерация рекомендаций
 # -----------------------------
+
+
 
 def generate_recommendations(spi: float) -> list[str]:
     """Вернуть список рекомендаций в зависимости от SPI."""

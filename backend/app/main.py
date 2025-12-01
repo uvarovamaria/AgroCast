@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from .core.config import settings
 from .api.v1 import api_router as api_v1_router
 
-# ВАЖНО: переменная должна называться именно app
 app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
